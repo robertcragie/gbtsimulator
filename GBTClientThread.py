@@ -30,10 +30,9 @@ class cGBTClientThread(GBT.cGBTThread):
 
     # Constructor
     def __init__(self):
-        GBT.cGBTThread.__init__(self, GBT.GBT_CLT_BTS, GBT.GBT_CLT_BTW)
-        self.bTimerEnabled = False # OVERRIDE
+        GBT.cGBTThread.__init__(self, GBT.GBT_CLT_BTS, GBT.GBT_CLT_BTW, True)
+        self.bTimerEnabled = True # OVERRIDE
         self.oThread.name = "Client Thread"
-        self.IsClient = True
         self.msgCount = 0 # Used to selectively deny messages to simulate loss
         self.startts = time.time_ns()
 
@@ -70,7 +69,7 @@ class cGBTClientThread(GBT.cGBTThread):
                 self.oLoggerThread.PostLog(Logger.LOG_CONSOLE_PRINT, "New sequence from server")
                 # Let's get going
                 self.StartGBT()
-        self.ProcessGBTAPDU(apdu, False)
+        self.ProcessGBTAPDU(apdu)
 
     def HandleEvent(self, event):
         '''

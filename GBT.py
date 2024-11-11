@@ -42,8 +42,10 @@ EVT_CLT_INVOKE_ACC_REQ = 2
 # GBT Server thread events
 EVT_SVR_INVOKE_ACC_RSP = 2
 
-aCltDropMsgs = []
-aSvrDropMsgs = []
+aCltDropMsgs = [0]
+aSvrDropMsgs = [0]
+
+tTimeouts = (5.0, 10.0) # Server, client
 
 ###############################################################################
 # Class : cEvt
@@ -119,10 +121,11 @@ class cGBTThread(EvQThread.cEvQThread):
     '''
 
     # Constructor
-    def __init__(self, BTS, BTW):
+    def __init__(self, BTS, BTW, bIsClient):
         EvQThread.cEvQThread.__init__(self)
         self.BTS = BTS
         self.BTW = BTW
+        self.bIsClient = bIsClient
         self.bGBTProcessing = False
         self.bTimerEnabled = True
         self.oTimer = None
@@ -155,11 +158,11 @@ class cGBTThread(EvQThread.cEvQThread):
         # Stop processing
         self.bGBTProcessing = False
 
-    def StartTimer(self, timeout):
+    def StartTimer(self):
         '''Start a timer.'''
         if self.bTimerEnabled and self.oTimer is None:
             #print("%s starting timer, duration %f" % (self.oThread.name, timeout))
-            self.oTimer = threading.Timer(timeout, self.HandleTimerExpiry)
+            self.oTimer = threading.Timer(tTimeouts[self.bIsClient], self.HandleTimerExpiry)
             self.oTimer.start()
 
     def StopTimer(self):
@@ -270,11 +273,11 @@ class cGBTThread(EvQThread.cEvQThread):
             # as we will be awaiting a response. 
             if Gs.STR == 0:
                 # Awaiting a response
-                self.StartTimer(5.0)
+                self.StartTimer()
                 # Stop sending blocks from the SQ.
                 break
 
-    def ProcessGBTAPDU(self, Gr:cGBTAPDU, bServer):
+    def ProcessGBTAPDU(self, Gr:cGBTAPDU):
         '''
         Process GBT APDU sub-procedure.
         See DLMS Green Book Ed. 11 V1.0 section 9.4.6.13.5.
@@ -283,7 +286,7 @@ class cGBTThread(EvQThread.cEvQThread):
         if not self.bGBTProcessing:
             return
 
-        if bServer == False and Gr.BN == 3:
+        if self.bIsClient == False and Gr.BN == 3:
             print("trap")
         # APDU received ending stream, so stop timeout timer
         if Gr.STR == 0:
@@ -383,7 +386,7 @@ class cGBTThread(EvQThread.cEvQThread):
             # Wself = BTW"
             self.oGBTStateVars.Wself = self.BTW            
             self.SendGBTAPDUStream()
-            self.StartTimer(5.0)
+            self.StartTimer()
         else:
             # "Gaps?"
             # The procedure is of course somewhat more convoluted :-)
@@ -425,9 +428,9 @@ class cGBTThread(EvQThread.cEvQThread):
                     self.StopTimer()
                     self.StopGBT()
                 else:
-                    self.StartTimer(5.0)
+                    self.StartTimer()
             else:
-                self.StartTimer(5.0)
+                self.StartTimer()
 
 ###############################################################################
 # Function : GBTMain
