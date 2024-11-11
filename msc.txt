@@ -1,0 +1,16 @@
+@startuml
+skin rose
+title GBT example
+participant CLT as "Client"
+participant SVR as "Server"
+CLT -x SVR: 1798696800 LB=0, STR=1, W=63, BN=1, BNA=0, BD=fsdgfskdfk
+CLT -> SVR: 1798696800 LB=0, STR=1, W=63, BN=2, BNA=0, BD=asblvkdasd
+CLT -> SVR: 1798696800 LB=0, STR=1, W=63, BN=3, BNA=0, BD=gfgldfgsau
+CLT -> SVR: 1798696800 LB=1, STR=0, W=63, BN=4, BNA=0, BD=fgbcbs
+SVR -x CLT: 1798696800 LB=1, STR=0, W=1, BN=1, BNA=0, BD=None
+CLT -> SVR: 11821625200 LB=0, STR=1, W=63, BN=1, BNA=0, BD=fsdgfskdfk
+CLT -> SVR: 11821625200 LB=0, STR=1, W=63, BN=2, BNA=0, BD=asblvkdasd
+CLT -> SVR: 11821625200 LB=0, STR=1, W=63, BN=3, BNA=0, BD=gfgldfgsau
+CLT -> SVR: 11821625200 LB=1, STR=0, W=63, BN=4, BNA=0, BD=fgbcbs
+SVR -> CLT: 11821625200 LB=1, STR=0, W=6, BN=1, BNA=4, BD=None
+@enduml
