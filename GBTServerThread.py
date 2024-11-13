@@ -14,7 +14,6 @@
 
 import GBT
 import Logger
-import time
 
 ###############################################################################
 # Class : cGBTServerThread
@@ -33,15 +32,6 @@ class cGBTServerThread(GBT.cGBTThread):
         GBT.cGBTThread.__init__(self, GBT.GBT_SVR_BTS, GBT.GBT_SVR_BTW, False)
         self.bTimerEnabled = False # OVERRIDE
         self.oThread.name = "Server Thread"
-        self.msgCount = 0 # Used to selectively deny messages to simulate loss
-        self.startts = time.time_ns()
-
-    def GetApduStr(self, apdu:GBT.cGBTAPDU, bDropped:bool):
-        msgtype = ('>','x')[bDropped]
-        ts = time.time_ns() - self.startts
-        if apdu.BN > GBT.GBT_RUNAWAY_THRESHOLD:
-            print("Client runaway!!!!!")
-        return "CLT -%c SVR: %s LB=%d, STR=%d, W=%d, BN=%d, BNA=%d, BD=%s" % (msgtype, ts, apdu.LB, apdu.STR, apdu.W, apdu.BN, apdu.BNA, apdu.BD) 
 
     def InvokeAccessResponse(self, data):
         '''
@@ -66,7 +56,7 @@ class cGBTServerThread(GBT.cGBTThread):
         # If we are not processing and the incoming APDU has payload, start processing
         if not self.bGBTProcessing:
             if (apdu.BD != None):
-                self.oLoggerThread.PostLog(Logger.LOG_CONSOLE_PRINT, "New sequence from client")
+                self.oLoggerThread.PostLog(Logger.LOG_CONSOLE_PRINT, "New stream from client")
                 # Let's get going
                 self.StartGBT()
         self.ProcessGBTAPDU(apdu)

@@ -13,7 +13,7 @@
 ###############################################################################
 
 from BaseThread import *
-from queue import Queue
+from queue import SimpleQueue
 
 ###############################################################################
 # Class : cEvQThread
@@ -35,7 +35,7 @@ class cEvQThread(cBaseThread):
     def __init__(self):
         cBaseThread.__init__(self)
         # Queue
-        self.oQueue = Queue(0)
+        self.oQueue = SimpleQueue()
 
     # Methods
     def SendEvent(self, event):

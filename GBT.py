@@ -15,6 +15,7 @@
 import EvQThread
 import Logger
 import threading
+import time
 
 # GBT constants
 GBT_MAX_PAYLOAD = 10 # Keep it small for simulator
@@ -23,12 +24,12 @@ GBT_RUNAWAY_THRESHOLD = 40
 # GBCS imposed windows
 
 GBT_CLT_BTS = 1  # Always confirmed
-GBT_CLT_BTW = 63 # The number of blocks a client can receive in one stream
+GBT_CLT_BTW = 63 # The number of blocks a client can receive in one window
 GBT_SVR_BTS = 1  # Always confirmed
-GBT_SVR_BTW = 6  # The number of blocks a server can receive in one stream
+GBT_SVR_BTW = 6  # The number of blocks a server can receive in one window
 
-GBT_CLT_WSELF = GBT_CLT_BTW # The number of blocks a client can receive in one stream
-GBT_SVR_WSELF = GBT_SVR_BTW # The number of blocks a server can receive in one stream
+GBT_CLT_WSELF = GBT_CLT_BTW # The number of blocks a client can receive in one window
+GBT_SVR_WSELF = GBT_SVR_BTW # The number of blocks a server can receive in one window
 GBT_CLT_WPEER = GBT_SVR_WSELF
 GBT_SVR_WPEER = GBT_CLT_WSELF
 
@@ -42,8 +43,8 @@ EVT_CLT_INVOKE_ACC_REQ = 2
 # GBT Server thread events
 EVT_SVR_INVOKE_ACC_RSP = 2
 
-aCltDropMsgs = [0]
-aSvrDropMsgs = [0]
+aCltDropMsgs = []
+aSvrDropMsgs = []
 
 tTimeouts = (5.0, 10.0) # Server, client
 
@@ -129,11 +130,16 @@ class cGBTThread(EvQThread.cEvQThread):
         self.bGBTProcessing = False
         self.bTimerEnabled = True
         self.oTimer = None
+        self.startts = time.time_ns()
         self.ClearVars()
         # GBT state vars will be cleared when peer thread is set.
+        self.iSAScnt = 0
+        self.iPGAcnt = 0
+        self.iCRFcnt = 0
 
     def ClearVars(self):
         self.oGBTStateVars = cGBTStateVars(self.BTS, self.BTW) # BTS, BTW
+        self.msgCount = 0 # Used to selectively deny messages to simulate loss
         self.dSQ = {} # Use dictionary keyed by BN
         self.dRQ = {} # Use dictionary keyed by BN
     
@@ -161,21 +167,47 @@ class cGBTThread(EvQThread.cEvQThread):
     def StartTimer(self):
         '''Start a timer.'''
         if self.bTimerEnabled and self.oTimer is None:
-            #print("%s starting timer, duration %f" % (self.oThread.name, timeout))
+            #print("%s starting timer, duration %f" % (self.GetNameStr(), timeout))
             self.oTimer = threading.Timer(tTimeouts[self.bIsClient], self.HandleTimerExpiry)
             self.oTimer.start()
 
     def StopTimer(self):
         '''Stop a timer.'''
         if self.bTimerEnabled and self.oTimer is not None:
-            #print("%s stopping timer" % self.oThread.name)
+            #print("%s stopping timer" % self.GetNameStr())
             self.oTimer.cancel()
             self.oTimer = None
 
     def HandleTimerExpiry(self):
         '''Handle a timer expiry.'''
-        #print("%s timer expiry" % self.oThread.name)
+        #print("%s timer expiry" % self.GetNameStr())
         self.SendEvent(cEvt(EVT_TIMER_EXPIRY_MSG))
+
+    def GetNameStr(self):
+        return ("Server", "Client")[self.bIsClient]
+
+    def GetApduStr(self, apdu:cGBTAPDU, bDropped:bool):
+        ts = time.time_ns() - self.startts
+        if apdu.BN > GBT_RUNAWAY_THRESHOLD:
+            print("%s runaway!!!!!" % self.GetNameStr())
+        msgtype = ('>','x')[bDropped]
+        sDir = ("CLT -%c SVR" % msgtype, "SVR -%c CLT" % msgtype)[self.bIsClient] 
+        return "%s: %s LB=%d, STR=%d, W=%d, BN=%d, BNA=%d, BD=%s" % (sDir, ts, apdu.LB, apdu.STR, apdu.W, apdu.BN, apdu.BNA, apdu.BD) 
+
+    def GetSimpleApduStr(self, apdu:cGBTAPDU):
+        return "LB=%d, STR=%d, W=%d, BN=%d, BNA=%d, BD=%s" % (apdu.LB, apdu.STR, apdu.W, apdu.BN, apdu.BNA, apdu.BD) 
+
+    def DiagnosticMsg(self, sMsg):
+        self.oLoggerThread.PostLog(Logger.LOG_CONSOLE_PRINT, "%s: %s" % (self.GetNameStr(), sMsg))
+
+    def SASDiagMsg(self, sMsg):
+        self.DiagnosticMsg("SAS [%d] %s" % (self.iSAScnt, sMsg))
+
+    def PGADiagMsg(self, sMsg):
+        self.DiagnosticMsg("PGA [%d] %s" % (self.iPGAcnt, sMsg))
+
+    def CRFDiagMsg(self, sMsg):
+        self.DiagnosticMsg("CRF [%d] %s" % (self.iCRFcnt, sMsg))
 
     # DLMS-defined functions
     # All the following methods reflect functions defined in the DLMS Green Book
@@ -214,6 +246,8 @@ class cGBTThread(EvQThread.cEvQThread):
         if not self.bGBTProcessing:
             return
         
+        self.SASDiagMsg("Send GBT APDU Stream")
+
         # "First GBT APDU to send?"
         # Initialisation will have been done prior to invocation
         # TODO?
@@ -223,6 +257,7 @@ class cGBTThread(EvQThread.cEvQThread):
 
         # "SQ empty?" 
         if len(self.dSQ) == 0:
+            self.SASDiagMsg("Add single block to SQ")
             # Add a single block
             bn = self.oGBTStateVars.NextBN
             # Last block management is difficult - see 9.4.6.13.4.3.2
@@ -235,7 +270,7 @@ class cGBTThread(EvQThread.cEvQThread):
         # "Take a sequence S of blocks from SQ. SQ starts with the
         # first block and contains at most Wpeer blocks"
         # Note: The blocks are not removed from SQ until acknowledged.
-        WpeerBlkcount = 0 # Use counter to ensure no more than Wpeer blocks sent in a stream
+        WpeerBlkcount = 0 # Use counter to ensure no more than Wpeer blocks sent in a window
         bnsSQ = sorted(self.dSQ.keys()) # Should already be in order but just in case
         for bn in bnsSQ:
             # "Send each block B of S with a GBT APDU Gs such that
@@ -249,7 +284,7 @@ class cGBTThread(EvQThread.cEvQThread):
             # Set Gs.STR
             # No more streaming if:
             # This is the last remaining block in the SQ, or 
-            # This is the last block in a Wpeer stream, or
+            # This is the last block in a Wpeer window, or
             # The block in the SQ is set to be the last block
             if (bn == bnsSQ[-1]) or \
                (WpeerBlkcount == (self.oGBTStateVars.Wpeer - 1)) or \
@@ -263,19 +298,25 @@ class cGBTThread(EvQThread.cEvQThread):
             Gs.W = self.oGBTStateVars.Wself
             Gs.BNA = self.oGBTStateVars.BNAself
 
+            self.SASDiagMsg("Sending APDU %s" % self.GetSimpleApduStr(Gs))
+
             # Send GBT APDU
             self.oPeerThread.SendEvent(cEvt(EVT_PEER_MSG, Gs))
 
             # Increment block count
             WpeerBlkcount += 1
 
-            # Run a timer if we have sent the final block in a stream,
+            # Run a timer if we have sent the final block in a window,
             # as we will be awaiting a response. 
             if Gs.STR == 0:
+                self.SASDiagMsg("End of window")
                 # Awaiting a response
                 self.StartTimer()
                 # Stop sending blocks from the SQ.
                 break
+
+        # Increment invocation count
+        self.iSAScnt += 1
 
     def ProcessGBTAPDU(self, Gr:cGBTAPDU):
         '''
@@ -286,19 +327,27 @@ class cGBTThread(EvQThread.cEvQThread):
         if not self.bGBTProcessing:
             return
 
-        if self.bIsClient == False and Gr.BN == 3:
-            print("trap")
-        # APDU received ending stream, so stop timeout timer
+        self.PGADiagMsg("Process GBT APDU")
+
+        #if not self.bIsClient and Gr.BN == 6:
+        #    print("Trap1") 
+        #if not self.bIsClient and Gr.BN == 12:
+        #    print("Trap2") 
+
+        # APDU received last block in window, so stop timeout timer
         if Gr.STR == 0:
             self.StopTimer()
 
         # "GBT PDU is ABORT"
         # Nothing to do here
 
+        self.PGADiagMsg("Processing APDU %s" % self.GetSimpleApduStr(Gr))
+
         # "Gr.BN = 1 and Gr.BNA = 0?"
         # "Initialize" (see Table 96)
         if (Gr.BN == 1) and (Gr.BNA == 0):
             # Initialise BNAself, STRself and Wself
+            self.PGADiagMsg("Initialising BNAself, STRself, Wself")
             self.oGBTStateVars.BNAself = 0
             self.oGBTStateVars.STRself = self.BTS
             self.oGBTStateVars.Wself = self.BTW
@@ -318,12 +367,14 @@ class cGBTThread(EvQThread.cEvQThread):
         if not (Gr.BN <= self.oGBTStateVars.BNAself):
             # "Block already in RQ?"
             if not (Gr.BN in self.dRQ.keys()):
+                self.PGADiagMsg("Adding to RQ")
                 # "Put B in RQ with B.LB = Gr.LB, B.BN = Gr.BN, B.BD = Gr.BD"
                 self.dRQ[Gr.BN] = cGBTBlock(Gr.LB, Gr.BN, Gr.BD)
 
         # "Wpeer = Gr.W, BNApeer = Gr.BNA"
         self.oGBTStateVars.Wpeer = Gr.W # Overrides a priori default
         self.oGBTStateVars.BNApeer = Gr.BNA
+        self.PGADiagMsg("Wpeer = %d, BNApeer = %d" % (Gr.W, Gr.BNA))
 
         # "Remove blocks up to and including BNApeer from SQ"
 
@@ -334,35 +385,43 @@ class cGBTThread(EvQThread.cEvQThread):
         prevBlk = None
         for bn in bnsSQ:
             if bn <= self.oGBTStateVars.BNApeer:
+                self.PGADiagMsg("Removing block %d from SQ" % bn)
                 prevBlk = self.dSQ.pop(bn)
             else:
                 break # Gone through all the low blocks
 
         # "Number of blocks in RQ = BTW?"
-        if (len(self.dRQ) == self.BTW):
+        #if (len(self.dRQ) == self.BTW):
+        if (False):
             # "Confirmed stream finished. Return RQ"
             # In this case it means checking the RQ
-            # This check seems superfluous as Gr.STR should always be 0 on the final block in the stream
-            bStrmFinished = True
+            # This check seems superfluous as Gr.STR should always be 0 on the last block in the window
+            self.PGADiagMsg("Window finished len(RQ) == BTW")
+            bWindowFinished = True
         else:
             # "STRpeer = TRUE?"
             if self.oGBTStateVars.STRpeer == 1:
-                bStrmFinished = False
+                self.PGADiagMsg("Window not finished")
+                bWindowFinished = False
                 # "Ask for next GBT APDU"
                 # In this case it means waiting for the next GBT APDU
             else:
-                bStrmFinished = True
+                self.PGADiagMsg("Window finished len(RQ) != BTW")
+                bWindowFinished = True
 
         # Somehow we need to determine when a sequence has actually been sent
         if (len(self.dSQ) == 0) and (prevBlk is not None) and (prevBlk.BD is not None):
             # Last block with payload has been removed from SQ
-            self.oLoggerThread.PostLog(Logger.LOG_CONSOLE_PRINT, "%s finished sending sequence" % self.oThread.name)
+            self.PGADiagMsg("Finished sending stream")
             self.StopTimer()
             self.StopGBT()
-        elif bStrmFinished:
+        elif bWindowFinished:
             # "Confirmed stream finished. Return RQ"
             # In this case it means checking the RQ
             self.CheckRQandFillGaps()
+
+        # Increment invocation count
+        self.iPGAcnt += 1
 
     def CheckRQandFillGaps(self):
         '''
@@ -372,7 +431,9 @@ class cGBTThread(EvQThread.cEvQThread):
         # Drop out if not processing
         if not self.bGBTProcessing:
             return
-        
+
+        self.CRFDiagMsg("Check RQ and Fill Gaps")
+            
         # "Confirmed stream"
         # TODO: Assume confirmed
 
@@ -381,6 +442,7 @@ class cGBTThread(EvQThread.cEvQThread):
 
         # "RQ empty?"
         if len(bnsRQ) == 0:
+            self.CRFDiagMsg("RQ empty")
             # "Recover all blocks in the window:
             # (Do not update BNAself)
             # Wself = BTW"
@@ -410,27 +472,34 @@ class cGBTThread(EvQThread.cEvQThread):
                 #self.oGBTStateVars.BNAself = bnCheck + 1
                 self.oGBTStateVars.BNAself = bnCheck
                 self.oGBTStateVars.Wself = gapSize - 1            
+                self.CRFDiagMsg("Gap, BNAself %d, Wself %d" % (self.oGBTStateVars.BNAself, self.oGBTStateVars.Wself))
             else:
                 self.oGBTStateVars.BNAself = bn
                 self.oGBTStateVars.Wself = self.BTW            
+                self.CRFDiagMsg("No gap, BNAself %d, Wself %d" % (self.oGBTStateVars.BNAself, self.oGBTStateVars.Wself))
 
             # Send acknowledgement
             self.SendGBTAPDUStream()
 
             if gap == False:
-                # Stop if the receive queue has a complete sequence
+                # Stop if the receive queue has a complete stream
                 # Check the block with the highest block number in the RQ
                 blk = self.dRQ[bnsRQ[-1]]
                 if (blk.LB == 1) and (blk.BD != None):
                     # Invoke indication/confirm?
                     # Stop processing
-                    self.oLoggerThread.PostLog(Logger.LOG_CONSOLE_PRINT, "%s finished receiving sequence" % self.oThread.name)
+                    self.CRFDiagMsg("Finished receiving stream")
                     self.StopTimer()
                     self.StopGBT()
                 else:
+                    self.CRFDiagMsg("Continue (1)")
                     self.StartTimer()
             else:
+                self.CRFDiagMsg("Continue (2)")
                 self.StartTimer()
+
+        # Increment invocation count
+        self.iCRFcnt += 1
 
 ###############################################################################
 # Function : GBTMain

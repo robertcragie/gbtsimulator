@@ -73,9 +73,9 @@ class cLogger:
             self.oFile = None
 
 ###############################################################################
-# Class : cGBTThread
+# Class : cLoggerThread
 #
-# GBT Thread class
+# Logger Thread class
 ###############################################################################
 
 class cLoggerThread(EvQThread.cEvQThread):
@@ -89,6 +89,7 @@ class cLoggerThread(EvQThread.cEvQThread):
     def __init__(self):
         EvQThread.cEvQThread.__init__(self)
         self.oThread.name = "Logger Thread"
+        self.bUseEvent = True # Set this to True to send event to thread, False to print directly
         self.oLogger = cLogger("msc.txt", True)
         self.oLogger.OpenFile()
         self.oLogger.Print("@startuml")
@@ -98,7 +99,13 @@ class cLoggerThread(EvQThread.cEvQThread):
         self.oLogger.Print("participant SVR as \"Server\"")
 
     def PostLog(self, mask, sLog):
-        self.SendEvent(cLogEvt(EVT_LOGGER_MSG, mask, sLog))
+        if self.bUseEvent:
+            self.SendEvent(cLogEvt(EVT_LOGGER_MSG, mask, sLog))
+        else:
+            if mask & LOG_CONSOLE_PRINT:
+                print(sLog)
+            if mask & LOG_LOGGER_PRINT:
+                self.oLogger.Print(sLog)        
 
     def Stop(self):
         self.oLogger.Print("@enduml")
