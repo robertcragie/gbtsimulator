@@ -34,17 +34,24 @@ import time
 
 # GBT constants
 GBT_MAX_PAYLOAD = 10 # Keep it small for simulator
-GBT_RUNAWAY_THRESHOLD = 40
 
-# GBCS imposed windows
-
+# Streaming and windowing parameters
+# Current set to those imposed by GBCS
 GBT_CLT_BTS = 1  # Always confirmed
 GBT_CLT_BTW = 63 # The number of blocks a client can receive in one window
 GBT_SVR_BTS = 1  # Always confirmed
 GBT_SVR_BTW = 6  # The number of blocks a server can receive in one window
 
-GBT_CLT_WSELF = GBT_CLT_BTW # The number of blocks a client can receive in one window
-GBT_SVR_WSELF = GBT_SVR_BTW # The number of blocks a server can receive in one window
+# Sequence number of message to drop (0 = first, 1 = second etc.)
+aCltDropMsgs = []
+aSvrDropMsgs = [0]
+
+# Timeouts in seconds for server and client wait for message
+tTimeouts = (5.0, 10.0) # Server, client
+
+# Set self and peer parameters
+GBT_CLT_WSELF = GBT_CLT_BTW
+GBT_SVR_WSELF = GBT_SVR_BTW
 GBT_CLT_WPEER = GBT_SVR_WSELF
 GBT_SVR_WPEER = GBT_CLT_WSELF
 
@@ -58,10 +65,9 @@ EVT_CLT_INVOKE_ACC_REQ = 2
 # GBT Server thread events
 EVT_SVR_INVOKE_ACC_RSP = 2
 
-aCltDropMsgs = []
-aSvrDropMsgs = [0]
 
-tTimeouts = (5.0, 10.0) # Server, client
+# Threshold to allow breakpoint on runaway. Debug only.
+GBT_RUNAWAY_THRESHOLD = 40
 
 ###############################################################################
 # Class : cEvt
