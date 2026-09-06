@@ -67,7 +67,7 @@ class cGBTSimulatorFrame(wx.Frame):
         self.oGBTServerThread = GBTServerThread.cGBTServerThread()
 
         # Logger thread
-        self.oLoggerThread = Logger.cLoggerThread()
+        self.oLoggerThread = Logger.cLoggerThread(False)
 
         # Exchange peer handles
         self.oGBTClientThread.SetPeerThread(self.oGBTServerThread)
@@ -130,26 +130,6 @@ class cGBTSimulatorFrame(wx.Frame):
         # Now create the Panel to put the other controls on.
         oPanel = wx.Panel(self)
 
-        #### Client invoke
-
-        # Add Client invoke button
-        self.oGBTClientInvokeButton = wx.Button(oPanel, -1, "Client", size = (60,30))
-        # Bind the handler to the button
-        self.Bind(wx.EVT_BUTTON, self.OnGBTClientInvokeButton, self.oGBTClientInvokeButton)
-
-        #### Server invoke
-
-        # Add Server invoke button
-        self.oGBTServerInvokeButton = wx.Button(oPanel, -1, "Server", size = (60,30))
-        # Bind the handler to the button
-        self.Bind(wx.EVT_BUTTON, self.OnGBTServerInvokeButton, self.oGBTServerInvokeButton)
-
-        #### Payload window
-
-        # Set up a payload window
-        self.oPayloadTextCtrl = wx.TextCtrl(oPanel, -1, self.sPayload, size = (400,200), style = wx.TE_MULTILINE)
-        self.Bind(wx.EVT_TEXT, self.EvHPayloadText, self.oPayloadTextCtrl)
-
         # Use a sizer to layout the controls, stacked vertically and with
         # a 10 pixel border around each
         oVSizer = wx.BoxSizer(wx.VERTICAL)
@@ -157,6 +137,17 @@ class cGBTSimulatorFrame(wx.Frame):
         # Invoke
         oStaticBox = wx.StaticBox(oPanel, -1, "Invoke")
         oBox = wx.StaticBoxSizer(oStaticBox, wx.HORIZONTAL)
+
+        # Add Client invoke button
+        self.oGBTClientInvokeButton = wx.Button(oStaticBox, -1, "Client", size = (60,30))
+        # Bind the handler to the button
+        self.Bind(wx.EVT_BUTTON, self.OnGBTClientInvokeButton, self.oGBTClientInvokeButton)
+
+        # Add Server invoke button
+        self.oGBTServerInvokeButton = wx.Button(oStaticBox, -1, "Server", size = (60,30))
+        # Bind the handler to the button
+        self.Bind(wx.EVT_BUTTON, self.OnGBTServerInvokeButton, self.oGBTServerInvokeButton)
+
         oBox.Add(self.oGBTClientInvokeButton, 0, wx.ALL, 5)
         oBox.Add(self.oGBTServerInvokeButton, 0, wx.ALL, 5)
         # ...add more controls to the horizontal sizer
@@ -165,6 +156,11 @@ class cGBTSimulatorFrame(wx.Frame):
         # Payload window
         oStaticBox = wx.StaticBox(oPanel, -1, "Payload")
         oBox = wx.StaticBoxSizer(oStaticBox, wx.HORIZONTAL)
+
+        # Set up a payload window
+        self.oPayloadTextCtrl = wx.TextCtrl(oStaticBox, -1, self.sPayload, size = (400,200), style = wx.TE_MULTILINE)
+        self.Bind(wx.EVT_TEXT, self.EvHPayloadText, self.oPayloadTextCtrl)
+
         oBox.Add(self.oPayloadTextCtrl, 0, wx.ALL, 5)
         # ...add more controls to the horizontal sizer
         oVSizer.Add(oBox, 0, wx.ALL, 5)

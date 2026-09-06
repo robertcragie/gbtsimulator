@@ -100,17 +100,23 @@ class cLoggerThread(EvQThread.cEvQThread):
     '''
 
     # Constructor
-    def __init__(self):
+    def __init__(self, bUsePlantUml):
         EvQThread.cEvQThread.__init__(self)
         self.oThread.name = "Logger Thread"
         self.bUseEvent = True # Set this to True to send event to thread, False to print directly
         self.oLogger = cLogger("msc.txt", True)
+        self.bUsePlantUml = bUsePlantUml
         self.oLogger.OpenFile()
-        self.oLogger.Print("@startuml")
-        self.oLogger.Print("skin rose")
+        if self.bUsePlantUml:
+            self.oLogger.Print("@startuml")
+            self.oLogger.Print("skin rose")
         self.oLogger.Print("title GBT example")
-        self.oLogger.Print("participant CLT as \"Client\"")
-        self.oLogger.Print("participant SVR as \"Server\"")
+        if self.bUsePlantUml:
+            self.oLogger.Print("participant CLT as \"Client\"")
+            self.oLogger.Print("participant SVR as \"Server\"")
+        else:
+            self.oLogger.Print("participant \"Client\" as CLT")
+            self.oLogger.Print("participant \"Server\" as SVR")
 
     def PostLog(self, mask, sLog):
         if self.bUseEvent:
@@ -122,7 +128,8 @@ class cLoggerThread(EvQThread.cEvQThread):
                 self.oLogger.Print(sLog)        
 
     def Stop(self):
-        self.oLogger.Print("@enduml")
+        if self.bUsePlantUml:
+            self.oLogger.Print("@enduml")
         self.oLogger.CloseFile()
         EvQThread.cEvQThread.Stop(self)
         
