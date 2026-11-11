@@ -60,6 +60,7 @@ class cGBTServerThread(GBT.cGBTThread):
         '''
         Drop a message from the Client task.
         '''
+        self.aDroppedBlocks.append(apdu.BN)
         self.oLoggerThread.PostLog(Logger.LOG_BOTH_PRINT, self.GetApduStr(apdu, True))
 
     def HandleMsgFromClient(self, apdu:GBT.cGBTAPDU):
@@ -80,10 +81,11 @@ class cGBTServerThread(GBT.cGBTThread):
         Pure virtual method to handle the event obtained from the queue.
         '''
         if event.evtType == GBT.EVT_PEER_MSG:
-            if self.msgCount in GBT.aSvrDropMsgs:
-                self.DropMsgFromClient(event.data)
+            apdu = event.data
+            if (apdu.BN in GBT.aSvrDropBlocks) and (apdu.BN not in self.aDroppedBlocks):
+                self.DropMsgFromClient(apdu)
             else:
-                self.HandleMsgFromClient(event.data)
+                self.HandleMsgFromClient(apdu)
             self.msgCount += 1
         elif event.evtType == GBT.EVT_SVR_INVOKE_ACC_RSP:
             self.InvokeAccessResponse(event.data)
