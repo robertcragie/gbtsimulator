@@ -44,10 +44,11 @@ GBT_SVR_BTW = 6  # The number of blocks a server can receive in one window
 
 # Block number (BN) of message to drop (1 = first, 2 = second etc.)
 aCltDropBlocks = []
-aSvrDropBlocks = [1,3]
+aSvrDropBlocks = [3]
 
 # Timeouts in seconds for server and client wait for message
-tTimeouts = (5.0, 10.0) # Server, client
+tTxTimeouts = (5.0, 10.0) # Server, client. Timeout waiting for ack.
+tRxTimeouts = (5.0, 10.0) # Server, client. Timeout waiting for next rx.
 
 # Set self and peer parameters
 GBT_CLT_WSELF = GBT_CLT_BTW
@@ -57,14 +58,14 @@ GBT_SVR_WPEER = GBT_CLT_WSELF
 
 # GBT Thread general events
 EVT_PEER_MSG = 0
-EVT_TIMER_EXPIRY_MSG = 1
+EVT_TX_TIMER_EXPIRY_MSG = 1
+EVT_RX_TIMER_EXPIRY_MSG = 2
 
 # GBT Client thread events
-EVT_CLT_INVOKE_ACC_REQ = 2
+EVT_CLT_INVOKE_ACC_REQ = 3
 
 # GBT Server thread events
-EVT_SVR_INVOKE_ACC_RSP = 2
-
+EVT_SVR_INVOKE_ACC_RSP = 3
 
 # Threshold to allow breakpoint on runaway. Debug only.
 GBT_RUNAWAY_THRESHOLD = 40
@@ -149,8 +150,8 @@ class cGBTThread(EvQThread.cEvQThread):
         self.BTW = BTW
         self.bIsClient = bIsClient
         self.bGBTProcessing = False
-        self.bTimerEnabled = True
-        self.oTimer = None
+        self.oTxTimer = cGBTTimer(tTxTimeouts, EVT_TX_TIMER_EXPIRY_MSG, self)
+        self.oRxTimer = cGBTTimer(tRxTimeouts, EVT_RX_TIMER_EXPIRY_MSG, self)
         self.startts = time.time_ns()
         self.ClearVars()
         # GBT state vars will be cleared when peer thread is set.
@@ -185,25 +186,6 @@ class cGBTThread(EvQThread.cEvQThread):
         self.oGBTStateVars.Wpeer = self.oPeerThread.oGBTStateVars.Wself
         # Stop processing
         self.bGBTProcessing = False
-
-    def StartTimer(self):
-        '''Start a timer.'''
-        if self.bTimerEnabled and self.oTimer is None:
-            #print("%s starting timer, duration %f" % (self.GetNameStr(), timeout))
-            self.oTimer = threading.Timer(tTimeouts[self.bIsClient], self.HandleTimerExpiry)
-            self.oTimer.start()
-
-    def StopTimer(self):
-        '''Stop a timer.'''
-        if self.bTimerEnabled and self.oTimer is not None:
-            #print("%s stopping timer" % self.GetNameStr())
-            self.oTimer.cancel()
-            self.oTimer = None
-
-    def HandleTimerExpiry(self):
-        '''Handle a timer expiry.'''
-        #print("%s timer expiry" % self.GetNameStr())
-        self.SendEvent(cEvt(EVT_TIMER_EXPIRY_MSG))
 
     def GetNameStr(self):
         return ("Server", "Client")[self.bIsClient]
@@ -328,12 +310,12 @@ class cGBTThread(EvQThread.cEvQThread):
             # Increment block count
             WpeerBlkcount += 1
 
-            # Run a timer if we have sent the final block in a window,
+            # Run a Tx timer if we have sent the final block in a window,
             # as we will be awaiting a response. 
             if Gs.STR == 0:
                 self.SASDiagMsg("End of window")
                 # Awaiting a response
-                self.StartTimer()
+                self.oTxTimer.Start()
                 # Stop sending blocks from the SQ.
                 break
 
@@ -349,6 +331,7 @@ class cGBTThread(EvQThread.cEvQThread):
         if not self.bGBTProcessing:
             return
 
+        self.oRxTimer.Stop()
         self.PGADiagMsg("Process GBT APDU")
 
         #if not self.bIsClient and Gr.BN == 6:
@@ -356,9 +339,9 @@ class cGBTThread(EvQThread.cEvQThread):
         #if not self.bIsClient and Gr.BN == 12:
         #    print("Trap2") 
 
-        # APDU received last block in window, so stop timeout timer
+        # APDU received last block in window, so stop Tx timeout timer
         if Gr.STR == 0:
-            self.StopTimer()
+            self.oTxTimer.Stop()
 
         # "GBT PDU is ABORT"
         # Nothing to do here
@@ -417,7 +400,8 @@ class cGBTThread(EvQThread.cEvQThread):
         if (False):
             # "Confirmed stream finished. Return RQ"
             # In this case it means checking the RQ
-            # This check seems superfluous as Gr.STR should always be 0 on the last block in the window
+            # This check seems superfluous as Gr.STR should always be 0
+            # on the last block in the window. Hence the "if (False)" above.
             self.PGADiagMsg("Window finished len(RQ) == BTW")
             bWindowFinished = True
         else:
@@ -427,6 +411,7 @@ class cGBTThread(EvQThread.cEvQThread):
                 bWindowFinished = False
                 # "Ask for next GBT APDU"
                 # In this case it means waiting for the next GBT APDU
+                self.oRxTimer.Start()
             else:
                 self.PGADiagMsg("Window finished len(RQ) != BTW")
                 bWindowFinished = True
@@ -435,11 +420,12 @@ class cGBTThread(EvQThread.cEvQThread):
         if (len(self.dSQ) == 0) and (prevBlk is not None) and (prevBlk.BD is not None):
             # Last block with payload has been removed from SQ
             self.PGADiagMsg("Finished sending stream")
-            self.StopTimer()
+            self.oTxTimer.Stop()
             self.StopGBT()
         elif bWindowFinished:
             # "Confirmed stream finished. Return RQ"
-            # In this case it means checking the RQ
+            # In this case it means checking the RQ, which is essentially
+            # an AL operation.
             self.CheckRQandFillGaps()
 
         # Increment invocation count
@@ -470,7 +456,7 @@ class cGBTThread(EvQThread.cEvQThread):
             # Wself = BTW"
             self.oGBTStateVars.Wself = self.BTW            
             self.SendGBTAPDUStream()
-            self.StartTimer()
+            self.oTxTimer.Start()
         else:
             # "Gaps?"
             # The procedure is of course somewhat more convoluted :-)
@@ -511,17 +497,50 @@ class cGBTThread(EvQThread.cEvQThread):
                     # Invoke indication/confirm?
                     # Stop processing
                     self.CRFDiagMsg("Finished receiving stream")
-                    self.StopTimer()
+                    self.oTxTimer.Stop()
                     self.StopGBT()
                 else:
                     self.CRFDiagMsg("Continue (1)")
-                    self.StartTimer()
+                    self.oTxTimer.Start()
             else:
                 self.CRFDiagMsg("Continue (2)")
-                self.StartTimer()
+                self.oTxTimer.Start()
 
         # Increment invocation count
         self.iCRFcnt += 1
+
+###############################################################################
+# Class : cGBTTimer
+#
+# Timer class
+###############################################################################
+
+class cGBTTimer():
+    def __init__(self, timeouts, evtID:int, oThread:cGBTThread):
+        self.bEnabled = True
+        self.oTimer = None
+        self.timeouts = timeouts
+        self.evtID = evtID
+        self.oThread = oThread
+
+    def Start(self):
+        '''Start a timer.'''
+        if self.bEnabled and self.oTimer is None:
+            #print("%s starting timer (%d), duration %f" % (self.oThread.GetNameStr(), self.evtID, timeout))
+            self.oTimer = threading.Timer(self.timeouts[self.oThread.bIsClient], self.HandleExpiry)
+            self.oTimer.start()
+
+    def Stop(self):
+        '''Stop a timer.'''
+        if self.bEnabled and self.oTimer is not None:
+            #print("%s stopping timer (%d)" % (self.oThread.GetNameStr(), self.evtID))
+            self.oTimer.cancel()
+            self.oTimer = None
+
+    def HandleExpiry(self):
+        '''Handle a timer expiry.'''
+        #print("%s timer expiry (%d)" % (self.oThread.GetNameStr(), self.evtID))
+        self.oThread.SendEvent(cEvt(self.evtID))
 
 ###############################################################################
 # Function : GBTMain

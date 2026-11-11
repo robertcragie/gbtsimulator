@@ -44,7 +44,8 @@ class cGBTServerThread(GBT.cGBTThread):
     # Constructor
     def __init__(self):
         GBT.cGBTThread.__init__(self, GBT.GBT_SVR_BTS, GBT.GBT_SVR_BTW, False)
-        self.bTimerEnabled = False # OVERRIDE
+        self.oTxTimer.bEnabled = False # OVERRIDE
+        self.oRxTimer.bEnabled = True # OVERRIDE
         self.oThread.name = "Server Thread"
 
     def InvokeAccessResponse(self, data):
@@ -89,8 +90,11 @@ class cGBTServerThread(GBT.cGBTThread):
             self.msgCount += 1
         elif event.evtType == GBT.EVT_SVR_INVOKE_ACC_RSP:
             self.InvokeAccessResponse(event.data)
-        elif event.evtType == GBT.EVT_TIMER_EXPIRY_MSG:
-            self.oLoggerThread.PostLog(Logger.LOG_CONSOLE_PRINT, "Server timer expired")
+        elif event.evtType == GBT.EVT_TX_TIMER_EXPIRY_MSG:
+            self.oLoggerThread.PostLog(Logger.LOG_CONSOLE_PRINT, "Server Tx timer expired")
+            self.CheckRQandFillGaps()
+        elif event.evtType == GBT.EVT_RX_TIMER_EXPIRY_MSG:
+            self.oLoggerThread.PostLog(Logger.LOG_CONSOLE_PRINT, "Server Rx timer expired")
             self.CheckRQandFillGaps()
 
 ###############################################################################

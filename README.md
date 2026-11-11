@@ -29,8 +29,9 @@ If the list is empty, no messages are dropped. Note that once a block has been d
 Server and client timeouts waiting for a message can be set in [GBT.py](GBT.py):
 
 ```python
-# Timeouts in seconds for server and client wait for message
-tTimeouts = (5.0, 10.0) # Server, client
+# Timeouts in seconds for server and client.
+tTxTimeouts = (5.0, 10.0) # Server, client. Timeout waiting for ack.
+tRxTimeouts = (5.0, 10.0) # Server, client. Timeout waiting for next rx.
 ```
 
 Note it currently requires [wxPython](https://www.wxpython.org/) to be installed for ease of execution and parameter modifiction but could easily be re-written to run on a command line thus not requiring wxPython.
