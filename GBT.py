@@ -46,7 +46,7 @@ GBT_SVR_BTW = 6  # The number of blocks a server can receive in one window
 aCltDropBlocks = []
 aSvrDropBlocks = [3]
 
-# Timeouts in seconds for server and client wait for message
+# Timeouts in seconds for server and client.
 tTxTimeouts = (5.0, 10.0) # Server, client. Timeout waiting for ack.
 tRxTimeouts = (5.0, 10.0) # Server, client. Timeout waiting for next rx.
 
