@@ -16,15 +16,15 @@ GBT_SVR_BTS = 1  # Always confirmed
 GBT_SVR_BTW = 6  # The number of blocks a server can receive in one window
 ```
 
-It allows simple simulated message dropping based on the sequence number. The two lists at the top of [GBT.py](GBT.py) are used:
+It allows simple simulated message dropping based on the block number. The two lists at the top of [GBT.py](GBT.py) are used:
 
 ```python
-# Sequence number of message to drop (0 = first, 1 = second etc.)
-aCltDropMsgs = []
-aSvrDropMsgs = [0]
+# Block number (BN) of message to drop (1 = first, 2 = second etc.)
+aCltDropBlocks = []
+aSvrDropBlocks = [1,3]
 ```
 
-If the list is empty, no messages are dropped.
+If the list is empty, no messages are dropped. Note that once a block has been dropped, any subsequent retry will not be dropped.
 
 Server and client timeouts waiting for a message can be set in [GBT.py](GBT.py):
 

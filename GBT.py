@@ -42,7 +42,7 @@ GBT_CLT_BTW = 63 # The number of blocks a client can receive in one window
 GBT_SVR_BTS = 1  # Always confirmed
 GBT_SVR_BTW = 6  # The number of blocks a server can receive in one window
 
-# Sequence number of message to drop according to BN (1 = first, 2 = second etc.)
+# Block number (BN) of message to drop (1 = first, 2 = second etc.)
 aCltDropBlocks = []
 aSvrDropBlocks = [1,3]
 
