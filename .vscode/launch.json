@@ -4,11 +4,19 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+        
         {
-            "name": "Python Debugger: Current File",
+            "name": "GBT Simulator wxApp",
             "type": "debugpy",
             "request": "launch",
             "program": "GBTSimulatorApp.py",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "GBT Simulator CLI",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "gbtsimcli.py",
             "console": "integratedTerminal"
         }
     ]
