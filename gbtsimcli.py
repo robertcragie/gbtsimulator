@@ -126,8 +126,5 @@ if __name__ == '__main__':
         oCLIApp.Shutdown()
     except KeyboardInterrupt:
         print("Shutting down on ctrl-c")
-        # Can't shutdown too early.
-        # What's missing is ensuring the client and server threads have finished
-        # This problem doesn't exist with the wxApp as closing the app shuts down.
         oCLIApp.Shutdown()
 
