@@ -117,7 +117,6 @@ class cGBTSimulatorCLI():
 if __name__ == '__main__':
     try:
         oCLIApp = cGBTSimulatorCLI()
-        #signal.signal(signal.SIGINT, sigint_handler)
         oCLIApp.ClientInvoke()
         # Wait for 10 minutes.
         # This is naff but prevents the main thread exiting early,
