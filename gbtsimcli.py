@@ -26,8 +26,6 @@
 #
 ###############################################################################
 
-import signal
-import sys
 import time
 import pickle
 import GBT
